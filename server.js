@@ -6,7 +6,7 @@ import OpenAI from "openai";
 const app = express();
 app.use(bodyParser.json());
 
-// 🔐 Load from environment variables
+// 🔐 Environment variables
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
@@ -30,7 +30,7 @@ app.get("/webhook", (req, res) => {
   }
 });
 
-// 🔹 Handle incoming WhatsApp messages
+// 🔹 Handle incoming messages
 app.post("/webhook", async (req, res) => {
   try {
     console.log("📩 Incoming:", JSON.stringify(req.body, null, 2));
@@ -47,7 +47,7 @@ app.post("/webhook", async (req, res) => {
 
     console.log("🧠 Generating design for:", userText);
 
-    // 🎨 Generate image using OpenAI
+    // 🎨 Generate image
     const image = await openai.images.generate({
       model: "gpt-image-1",
       prompt: `
@@ -63,16 +63,36 @@ Style:
 - Modern church design
 - High contrast
 - Social media square (1:1)
-- Professional, high-end look
       `,
       size: "1024x1024"
     });
 
-    const imageUrl = image.data[0].url;
+    // ✅ Get base64 image
+    const image_base64 = image.data[0].b64_json;
+    const imageBuffer = Buffer.from(image_base64, "base64");
 
-    console.log("🖼️ Image generated:", imageUrl);
+    console.log("🖼️ Image generated successfully");
 
-    // 📤 Send image back to WhatsApp
+    // 📤 Upload media to WhatsApp
+    const mediaUpload = await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
+      imageBuffer,
+      {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          "Content-Type": "image/png"
+        },
+        params: {
+          messaging_product: "whatsapp"
+        }
+      }
+    );
+
+    const mediaId = mediaUpload.data.id;
+
+    console.log("📦 Media uploaded:", mediaId);
+
+    // 📤 Send image message
     await axios.post(
       `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
       {
@@ -80,7 +100,7 @@ Style:
         to: from,
         type: "image",
         image: {
-          link: imageUrl
+          id: mediaId
         }
       },
       {
@@ -91,7 +111,7 @@ Style:
       }
     );
 
-    console.log("✅ Sent back to WhatsApp");
+    console.log("✅ Sent image to WhatsApp");
 
     res.sendStatus(200);
   } catch (error) {
@@ -100,7 +120,7 @@ Style:
   }
 });
 
-// 🔥 IMPORTANT: Use Render's port
+// 🔥 Use Render port
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
