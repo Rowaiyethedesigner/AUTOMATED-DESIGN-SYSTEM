@@ -6,30 +6,35 @@ import OpenAI from "openai";
 const app = express();
 app.use(bodyParser.json());
 
+// 🔐 Load from environment variables
 const openai = new OpenAI({
-  apiKey: "YOUR_OPENAI_API_KEY"
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-const VERIFY_TOKEN = "ayomide@234";
-const WHATSAPP_TOKEN = "YOUR_WHATSAPP_TOKEN";
-const PHONE_NUMBER_ID = "YOUR_PHONE_NUMBER_ID";
+const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
+const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
-// 🔹 Webhook Verification (Meta requirement)
+// 🔹 Webhook verification (Meta)
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
-  if (mode && token === VERIFY_TOKEN) {
+  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+    console.log("✅ Webhook verified");
     return res.status(200).send(challenge);
   } else {
+    console.log("❌ Webhook verification failed");
     return res.sendStatus(403);
   }
 });
 
-// 🔹 Handle incoming messages
+// 🔹 Handle incoming WhatsApp messages
 app.post("/webhook", async (req, res) => {
   try {
+    console.log("📩 Incoming:", JSON.stringify(req.body, null, 2));
+
     const message =
       req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
 
@@ -38,28 +43,36 @@ app.post("/webhook", async (req, res) => {
     const userText = message.text?.body;
     const from = message.from;
 
-    // 🧠 Generate design
+    if (!userText) return res.sendStatus(200);
+
+    console.log("🧠 Generating design for:", userText);
+
+    // 🎨 Generate image using OpenAI
     const image = await openai.images.generate({
       model: "gpt-image-1",
       prompt: `
-      Design a premium Nigerian church flyer.
+Design a premium Nigerian church flyer.
 
-      Details:
-      ${userText}
+Details:
+${userText}
 
-      Style:
-      - Bold typography
-      - Gold and black cinematic lighting
-      - Clean layout
-      - Modern church design
-      - High quality, 4K look
+Style:
+- Bold typography
+- Clean layout
+- Gold and black cinematic lighting
+- Modern church design
+- High contrast
+- Social media square (1:1)
+- Professional, high-end look
       `,
       size: "1024x1024"
     });
 
     const imageUrl = image.data[0].url;
 
-    // 📤 Send back to WhatsApp
+    console.log("🖼️ Image generated:", imageUrl);
+
+    // 📤 Send image back to WhatsApp
     await axios.post(
       `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
       {
@@ -78,11 +91,18 @@ app.post("/webhook", async (req, res) => {
       }
     );
 
+    console.log("✅ Sent back to WhatsApp");
+
     res.sendStatus(200);
   } catch (error) {
-    console.error(error);
+    console.error("❌ ERROR:", error.response?.data || error.message);
     res.sendStatus(500);
   }
 });
 
-app.listen(3000, () => console.log("Server running on port 3000"));
+// 🔥 IMPORTANT: Use Render's port
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
