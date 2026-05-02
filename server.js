@@ -2,6 +2,7 @@ import express from "express";
 import axios from "axios";
 import bodyParser from "body-parser";
 import OpenAI from "openai";
+import FormData from "form-data";
 
 const app = express();
 app.use(bodyParser.json());
@@ -67,23 +68,27 @@ Style:
       size: "1024x1024"
     });
 
-    // ✅ Get base64 image
+    // ✅ Convert base64 to buffer
     const image_base64 = image.data[0].b64_json;
     const imageBuffer = Buffer.from(image_base64, "base64");
 
     console.log("🖼️ Image generated successfully");
 
-    // 📤 Upload media to WhatsApp
+    // 📤 Upload media to WhatsApp (FIXED)
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append("file", imageBuffer, {
+      filename: "design.png",
+      contentType: "image/png"
+    });
+
     const mediaUpload = await axios.post(
       `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
-      imageBuffer,
+      form,
       {
         headers: {
           Authorization: `Bearer ${WHATSAPP_TOKEN}`,
-          "Content-Type": "image/png"
-        },
-        params: {
-          messaging_product: "whatsapp"
+          ...form.getHeaders()
         }
       }
     );
